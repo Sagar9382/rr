@@ -93,20 +93,20 @@ vm_parent = {
 }
 
 
-key_parent ={
-  vault_key ={
-  key_vault_name = "apple-keyvault"
-  location = "eastus"
-  rg_name = "tom"
-  sku = "standard"
-}
+key_parent = {
+  vault_key = {
+    key_vault_name = "apple-keyvault"
+    location       = "eastus"
+    rg_name        = "tom"
+    sku            = "standard"
+  }
 }
 
-secrets_parent ={
-  secret1 ={
-     keyvault_name = "apple-keyvault"
-     rg_name       = "tom"
-     secret_name  = "vm-password"
-     secret_value = "sagarvm@123"
+secrets_parent = {
+  secret1 = {
+    keyvault_name = "apple-keyvault"
+    rg_name       = "tom"
+    secret_name   = "vm-password"
+    secret_value  = "sagarvm@123"
   }
 }

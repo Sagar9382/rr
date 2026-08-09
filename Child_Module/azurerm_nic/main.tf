@@ -1,5 +1,5 @@
 resource "azurerm_network_interface" "example" {
-    for_each = var.nic
+  for_each            = var.nic
   name                = each.value.nic_name
   location            = each.value.location
   resource_group_name = each.value.rg_name
