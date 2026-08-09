@@ -1,0 +1,18 @@
+# Terraform local files
+.terraform/
+
+# Terraform state
+*.tfstate
+*.tfstate.*
+
+# Terraform plan files
+*.tfplan
+tfplan
+tfplan.json
+
+# Local executables
+*.exe
+
+# Crash logs
+crash.log
+crash.*.log

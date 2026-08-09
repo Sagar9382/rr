@@ -1,0 +1,12 @@
+title = "Custom Terraform Secrets Rules"
+
+[[rules]]
+id = "terraform-password-leak"
+description = "Detected a possible password or secret in Terraform vars"
+regex = '(?i)(password|secret|token|key)\s*=\s*"[^"]+"'
+keywords = [
+    "password",
+    "secret",
+    "token",
+    "key"
+]
