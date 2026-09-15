@@ -92,10 +92,20 @@ stages:
                 echo "=== Generating Terraform Execution Plan ==="
                 terraform plan -out=tfplan
 
+          - task: CopyFiles@2
+            displayName: 'Stage Plan & Lock File'
+            inputs:
+              SourceFolder: '$(workingDirectory)'
+              Contents: |
+                tfplan
+                .terraform.lock.hcl
+              TargetFolder: '$(Build.ArtifactStagingDirectory)/tfplan'
+            condition: succeeded()
+
           - task: PublishPipelineArtifact@1
             displayName: 'Publish Execution Plan Artifact'
             inputs:
-              targetPath: '$(workingDirectory)/tfplan'
+              targetPath: '$(Build.ArtifactStagingDirectory)/tfplan'
               artifactName: 'tfplan'
             condition: succeeded()
 
