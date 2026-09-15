@@ -18,7 +18,7 @@ pr:
 variables:
   # Azure DevOps ARM Service Connection Name (Configure in Azure DevOps Project Settings -> Service Connections)
   - name: serviceConnection
-    value: 'azure-spn-landing-zone'
+    value: 'my-connect'
   # Working directory where Parent_Module is located
   - name: workingDirectory
     value: '$(System.DefaultWorkingDirectory)/Parent_Module'
