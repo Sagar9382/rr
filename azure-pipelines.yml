@@ -1,0 +1,154 @@
+# Azure DevOps CI/CD Pipeline for Azure Landing Zone (Terraform)
+# File: azure-pipelines.yml
+
+name: $(Build.BuildId)
+
+# Trigger pipeline on push to main branch
+trigger:
+  branches:
+    include:
+      - main
+
+# Trigger pipeline on pull requests targeting main branch
+pr:
+  branches:
+    include:
+      - main
+
+variables:
+  # Azure DevOps ARM Service Connection Name (Configure in Azure DevOps Project Settings -> Service Connections)
+  - name: serviceConnection
+    value: 'azure-spn-landing-zone'
+  # Working directory where Parent_Module is located
+  - name: workingDirectory
+    value: '$(System.DefaultWorkingDirectory)/Parent_Module'
+  # Terraform version to use
+  - name: terraformVersion
+    value: '1.9.5'
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+stages:
+  # =========================================================================
+  # STAGE 1: Validate & Plan (Runs on both PRs and Main branch pushes)
+  # =========================================================================
+  - stage: ValidateAndPlan
+    displayName: '1. Validate & Plan'
+    jobs:
+      - job: TerraformPlanJob
+        displayName: 'Terraform Init, Validate & Plan'
+        steps:
+          - task: AzureCLI@2
+            displayName: 'Install Terraform CLI'
+            inputs:
+              azureSubscription: '$(serviceConnection)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                echo "Installing Terraform version ${{ variables.terraformVersion }}..."
+                wget -q https://releases.hashicorp.com/terraform/${{ variables.terraformVersion }}/terraform_${{ variables.terraformVersion }}_linux_amd64.zip
+                unzip -o terraform_${{ variables.terraformVersion }}_linux_amd64.zip
+                sudo mv terraform /usr/local/bin/
+                terraform -version
+
+          - task: AzureCLI@2
+            displayName: 'Terraform Format & Validate'
+            inputs:
+              azureSubscription: '$(serviceConnection)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              workingDirectory: '$(workingDirectory)'
+              addSpnToEnvironment: true
+              inlineScript: |
+                export ARM_CLIENT_ID=$servicePrincipalId
+                export ARM_CLIENT_SECRET=$servicePrincipalKey
+                export ARM_TENANT_ID=$tenantId
+                export ARM_SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+
+                echo "=== 1. Checking Terraform Formatting ==="
+                terraform fmt -check -recursive .. || echo "##vso[task.logissue type=warning]Terraform formatting issues detected. Run 'terraform fmt -recursive' locally."
+
+                echo "=== 2. Initializing Terraform Backend ==="
+                terraform init
+
+                echo "=== 3. Validating Terraform Configuration ==="
+                terraform validate
+
+          - task: AzureCLI@2
+            displayName: 'Terraform Plan'
+            inputs:
+              azureSubscription: '$(serviceConnection)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              workingDirectory: '$(workingDirectory)'
+              addSpnToEnvironment: true
+              inlineScript: |
+                export ARM_CLIENT_ID=$servicePrincipalId
+                export ARM_CLIENT_SECRET=$servicePrincipalKey
+                export ARM_TENANT_ID=$tenantId
+                export ARM_SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+
+                echo "=== Generating Terraform Execution Plan ==="
+                terraform plan -out=tfplan
+
+          - task: PublishPipelineArtifact@1
+            displayName: 'Publish Execution Plan Artifact'
+            inputs:
+              targetPath: '$(workingDirectory)/tfplan'
+              artifactName: 'tfplan'
+            condition: succeeded()
+
+  # =========================================================================
+  # STAGE 2: Deploy Landing Zone (Runs ONLY on Main branch merge/push)
+  # =========================================================================
+  - stage: Deploy
+    displayName: '2. Deploy Landing Zone'
+    dependsOn: ValidateAndPlan
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - deployment: TerraformApplyJob
+        displayName: 'Terraform Apply'
+        # Environment name in Azure DevOps for manual approvals and audit tracking
+        environment: 'landing-zone-production'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: AzureCLI@2
+                  displayName: 'Install Terraform CLI'
+                  inputs:
+                    azureSubscription: '$(serviceConnection)'
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    inlineScript: |
+                      wget -q https://releases.hashicorp.com/terraform/${{ variables.terraformVersion }}/terraform_${{ variables.terraformVersion }}_linux_amd64.zip
+                      unzip -o terraform_${{ variables.terraformVersion }}_linux_amd64.zip
+                      sudo mv terraform /usr/local/bin/
+
+                - task: DownloadPipelineArtifact@2
+                  displayName: 'Download Plan Artifact'
+                  inputs:
+                    buildType: 'current'
+                    artifactName: 'tfplan'
+                    targetPath: '$(workingDirectory)'
+
+                - task: AzureCLI@2
+                  displayName: 'Terraform Apply'
+                  inputs:
+                    azureSubscription: '$(serviceConnection)'
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    workingDirectory: '$(workingDirectory)'
+                    addSpnToEnvironment: true
+                    inlineScript: |
+                      export ARM_CLIENT_ID=$servicePrincipalId
+                      export ARM_CLIENT_SECRET=$servicePrincipalKey
+                      export ARM_TENANT_ID=$tenantId
+                      export ARM_SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+
+                      echo "=== Re-initializing Terraform ==="
+                      terraform init
+
+                      echo "=== Applying Terraform Plan ==="
+                      terraform apply -auto-approve tfplan
